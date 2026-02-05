@@ -163,6 +163,10 @@ class DataStore {
     return this.users.get(id);
   }
 
+  getUser(id: string): User | undefined {
+    return this.getUserById(id);
+  }
+
   getUserByEmail(email: string): User | undefined {
     const normalizedEmail = email.trim().toLowerCase();
 

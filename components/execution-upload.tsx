@@ -45,18 +45,25 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
           throw new Error('You must be logged in to upload executions');
         }
 
-        const allUsers = store.getAllUsers();
         const currentUser = store.getUser(session.user_id);
+        if (!currentUser) {
+          throw new Error('Unable to identify current user');
+        }
+
+        const eligibleAgents =
+          currentUser.role === 'manager'
+            ? store.getUsersByManager(currentUser.id)
+            : store.getUsersByRole('agent');
 
         const usedMinutesByUserAndDate = new Map<string, number>();
 
         importResult.imported_data.forEach((row) => {
-          const matchingUser = allUsers.find((u) => u.name.toLowerCase() === row.agent_name.toLowerCase());
+          const matchingUser = eligibleAgents.find((u) => u.name.toLowerCase() === row.agent_name.toLowerCase());
           if (!matchingUser) {
             return;
           }
 
-          const taskDefinition = store.getTaskTargetDefinition(row.task_name, session.user_id);
+          const taskDefinition = store.getTaskTargetDefinition(row.task_name, currentUser.id);
           if (!taskDefinition) {
             return;
           }
@@ -122,7 +129,7 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
 
         const upload: BulkExecutionUpload = {
           id: `exec-upload-${Date.now()}`,
-          uploaded_by: currentUser?.id || 'unknown',
+          uploaded_by: currentUser.id,
           upload_date: new Date(),
           file_name: file.name,
           rows_processed: importResult.rows_processed,
