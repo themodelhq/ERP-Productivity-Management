@@ -159,9 +159,7 @@ class DataStore {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }
 
-  // User operations
-  getUser(id: string): User | undefined {
-    return this.users.get(id);
+    return user;
   }
 
   getUserByEmail(email: string): User | undefined {
@@ -169,7 +167,30 @@ class DataStore {
     for (const user of this.users.values()) {
       if (user.email === normalizedEmail) return user;
     }
-    return undefined;
+
+    const now = new Date();
+    const id = `user-${crypto.randomUUID()}`;
+    const user: User = {
+      id,
+      email: normalizedEmail,
+      name: normalizedName,
+      role: params.role,
+      department: params.department,
+      manager_id: params.manager_id,
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      settings: {
+        notifications_enabled: true,
+        idle_detection_enabled: true,
+        privacy_mode: false,
+      },
+    };
+
+    this.users.set(user.id, user);
+    this.passwordsByUserId.set(user.id, params.password);
+    this.persist();
+    return user;
   }
 
   hasUsers(): boolean {

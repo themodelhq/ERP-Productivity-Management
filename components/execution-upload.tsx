@@ -175,7 +175,7 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
         <div className="flex items-center gap-3">
           <input
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.xlsx,.xls"
             onChange={handleFileSelect}
             disabled={isProcessing}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
