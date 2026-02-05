@@ -421,14 +421,6 @@ export function ManagerDashboard() {
           <TabsContent value="executions" className="space-y-4">
             <ExecutionUpload />
           </TabsContent>
-
-          <TabsContent value="targets" className="space-y-4">
-            <TargetUpload />
-          </TabsContent>
-
-          <TabsContent value="executions" className="space-y-4">
-            <ExecutionUpload />
-          </TabsContent>
         </Tabs>
       </div>
     </div>

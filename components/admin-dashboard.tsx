@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Upload, Users, Settings, LogOut } from 'lucide-react';
+import { Upload, Users, Settings, LogOut, Trash2 } from 'lucide-react';
 import { TargetUpload } from '@/components/target-upload';
 import { ExecutionUpload } from '@/components/execution-upload';
 import type { User } from '@/lib/db-schema';
@@ -20,7 +20,16 @@ function parseCsvRows(content: string): string[][] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => line.split(',').map((value) => value.trim()));
+    .map((line) => line.split(',').map((value) => parseCsvValue(value)));
+}
+
+
+function parseCsvValue(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/""/g, '"').trim();
+  }
+  return trimmed;
 }
 
 function findUserByEmail(users: User[], email: string): User | undefined {
@@ -98,6 +107,27 @@ export function AdminDashboard() {
     }
   };
 
+
+
+  const handleDeleteUser = (userId: string, userName: string) => {
+    setUserCreateMessage('');
+
+    if (session?.user_id === userId) {
+      setUserCreateMessage('You cannot delete your own admin account while signed in.');
+      return;
+    }
+
+    const store = getStore();
+    const didDelete = store.deleteUser(userId);
+
+    if (!didDelete) {
+      setUserCreateMessage('Failed to delete user. Please refresh and try again.');
+      return;
+    }
+
+    refreshUsersAndStats();
+    setUserCreateMessage(`${userName} has been deleted successfully.`);
+  };
 
 
   const handleManualAssignment = (e: React.FormEvent) => {
@@ -404,12 +434,21 @@ export function AdminDashboard() {
                               Manager: {user.manager_id ? managersById.get(user.manager_id)?.name || 'Unassigned' : 'Unassigned'}
                             </p>
                           </div>
-                          <div className="text-xs">
+                          <div className="flex items-center gap-2">
                             <span
-                              className={`px-2 py-1 rounded ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                              className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                             >
                               {user.is_active ? 'Active' : 'Inactive'}
                             </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id, user.name)}
+                              className="h-8 px-2 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -429,12 +468,21 @@ export function AdminDashboard() {
                             <p className="font-medium text-sm">{user.name}</p>
                             <p className="text-xs text-slate-600">{user.email}</p>
                           </div>
-                          <div className="text-xs">
+                          <div className="flex items-center gap-2">
                             <span
-                              className={`px-2 py-1 rounded ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                              className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                             >
                               {user.is_active ? 'Active' : 'Inactive'}
                             </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id, user.name)}
+                              className="h-8 px-2 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -454,12 +502,21 @@ export function AdminDashboard() {
                             <p className="font-medium text-sm">{user.name}</p>
                             <p className="text-xs text-slate-600">{user.email}</p>
                           </div>
-                          <div className="text-xs">
+                          <div className="flex items-center gap-2">
                             <span
-                              className={`px-2 py-1 rounded ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                              className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                             >
                               {user.is_active ? 'Active' : 'Inactive'}
                             </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id, user.name)}
+                              className="h-8 px-2 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
                           </div>
                         </div>
                       ))}
