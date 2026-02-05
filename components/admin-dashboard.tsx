@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Upload, Users, Settings, LogOut, Download } from 'lucide-react';
+import { Upload, Users, Settings, LogOut } from 'lucide-react';
 import { TargetUpload } from '@/components/target-upload';
 import { ExecutionUpload } from '@/components/execution-upload';
 
@@ -18,7 +17,10 @@ export function AdminDashboard() {
   const { session, logout } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [systemStats, setSystemStats] = useState<any>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [adminCreateMessage, setAdminCreateMessage] = useState('');
 
   useEffect(() => {
     const store = getStore();
@@ -38,13 +40,36 @@ export function AdminDashboard() {
     });
   }, []);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    setUploadFile(file);
-    // In production, parse Excel file and import targets
-    console.log('[v0] File selected:', file.name);
+
+  const handleCreateAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminCreateMessage('');
+
+    try {
+      getStore().createUser({
+        name: newAdminName,
+        email: newAdminEmail,
+        password: newAdminPassword,
+        role: 'admin',
+      });
+
+      const allUsers = getStore().getAllUsers();
+      setUsers(allUsers);
+      setSystemStats({
+        total_users: allUsers.length,
+        agents: allUsers.filter((u) => u.role === 'agent').length,
+        managers: allUsers.filter((u) => u.role === 'manager').length,
+        admins: allUsers.filter((u) => u.role === 'admin').length,
+        active_users: allUsers.filter((u) => u.is_active).length,
+      });
+      setAdminCreateMessage('Admin account created successfully.');
+      setNewAdminName('');
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+    } catch (error) {
+      setAdminCreateMessage(error instanceof Error ? error.message : 'Failed to create admin account');
+    }
   };
 
   if (!session) {
@@ -56,12 +81,6 @@ export function AdminDashboard() {
     manager: users.filter((u) => u.role === 'manager'),
     admin: users.filter((u) => u.role === 'admin'),
   };
-
-  const roleDistribution = [
-    { name: 'Agents', value: usersByRole.agent.length, fill: '#3b82f6' },
-    { name: 'Managers', value: usersByRole.manager.length, fill: '#10b981' },
-    { name: 'Admins', value: usersByRole.admin.length, fill: '#8b5cf6' },
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -157,6 +176,27 @@ export function AdminDashboard() {
               <CardHeader>
                 <CardTitle>User Management</CardTitle>
                 <CardDescription>View and manage all system users</CardDescription>
+              <form onSubmit={handleCreateAdmin} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-2">
+                <Input
+                  placeholder="New admin name"
+                  value={newAdminName}
+                  onChange={(e) => setNewAdminName(e.target.value)}
+                />
+                <Input
+                  type="email"
+                  placeholder="admin@company.com"
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="Minimum 8 characters"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                />
+                <Button type="submit">Create Admin</Button>
+              </form>
+              {adminCreateMessage && <p className="text-sm mt-2 text-slate-700">{adminCreateMessage}</p>}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
