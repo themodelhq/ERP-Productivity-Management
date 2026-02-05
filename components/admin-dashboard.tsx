@@ -15,21 +15,53 @@ import { ExecutionUpload } from '@/components/execution-upload';
 import type { User } from '@/lib/db-schema';
 
 function parseCsvRows(content: string): string[][] {
-  return content
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.split(',').map((value) => parseCsvValue(value)));
-}
+  const rows: string[][] = [];
+  const normalized = content.replace(/\r/g, '');
+  let currentRow: string[] = [];
+  let currentValue = '';
+  let inQuotes = false;
 
+  for (let i = 0; i < normalized.length; i += 1) {
+    const char = normalized[i];
 
-function parseCsvValue(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1).replace(/""/g, '"').trim();
+    if (char === '"') {
+      const nextChar = normalized[i + 1];
+      if (inQuotes && nextChar === '"') {
+        currentValue += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentValue.trim());
+      currentValue = '';
+      continue;
+    }
+
+    if (char === '\n' && !inQuotes) {
+      currentRow.push(currentValue.trim());
+      if (currentRow.some((cell) => cell.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentValue = '';
+      continue;
+    }
+
+    currentValue += char;
   }
-  return trimmed;
+
+  if (currentValue.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentValue.trim());
+    if (currentRow.some((cell) => cell.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
 }
 
 function findUserByEmail(users: User[], email: string): User | undefined {
