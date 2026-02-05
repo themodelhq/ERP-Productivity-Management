@@ -50,12 +50,9 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
           throw new Error('Unable to identify current user');
         }
 
-        const assignedAgents = store.getUsersByManager(currentUser.id);
         const eligibleAgents =
           currentUser.role === 'manager'
-            ? assignedAgents.length > 0
-              ? assignedAgents
-              : store.getUsersByRole('agent')
+            ? store.getUsersByManager(currentUser.id)
             : store.getUsersByRole('agent');
 
         const usedMinutesByUserAndDate = new Map<string, number>();

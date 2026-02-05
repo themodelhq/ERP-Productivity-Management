@@ -104,7 +104,7 @@ export function ManagerDashboard() {
   const selectedAgentDailyMinutes = selectedAgentTaskRows.reduce((sum, row) => sum + row.used_minutes, 0);
 
   const dailyAgentSummary = getStore()
-    .getUsersByRole('agent')
+    .getUsersByManager(session.user_id)
     .map((agent) => {
       const taskRows = getStore()
         .getExecutionsByDate(selectedDate)
@@ -411,7 +411,15 @@ export function ManagerDashboard() {
 
           {/* Reports Tab */}
           <TabsContent value="reports" className="space-y-4">
-            <ReportingPanel managerEmail={session.email} />
+            <ReportingPanel managerEmail={session.email} managerId={session.user_id} />
+          </TabsContent>
+
+          <TabsContent value="targets" className="space-y-4">
+            <TargetUpload />
+          </TabsContent>
+
+          <TabsContent value="executions" className="space-y-4">
+            <ExecutionUpload />
           </TabsContent>
 
           <TabsContent value="targets" className="space-y-4">
