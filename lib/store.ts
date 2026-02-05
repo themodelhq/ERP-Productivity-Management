@@ -159,17 +159,56 @@ class DataStore {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }
 
-  // User operations
-  getUser(id: string): User | undefined {
-    return this.users.get(id);
-  }
+  createUser(params: {
+    email: string;
+    name: string;
+    role: UserRole;
+    password: string;
+    department?: string;
+    manager_id?: string;
+  }): User {
+    const normalizedEmail = params.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error('Email is required');
+    }
 
   getUserByEmail(email: string): User | undefined {
     const normalizedEmail = email.trim().toLowerCase();
     for (const user of this.users.values()) {
       if (user.email === normalizedEmail) return user;
     }
-    return undefined;
+
+    if (params.password.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+
+    const normalizedName = params.name.trim();
+    if (!normalizedName) {
+      throw new Error('Name is required');
+    }
+
+    const now = new Date();
+    const id = `user-${crypto.randomUUID()}`;
+    const user: User = {
+      id,
+      email: normalizedEmail,
+      name: normalizedName,
+      role: params.role,
+      department: params.department,
+      manager_id: params.manager_id,
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      settings: {
+        notifications_enabled: true,
+        idle_detection_enabled: true,
+        privacy_mode: false,
+      },
+    };
+
+    this.users.set(user.id, user);
+    this.passwordsByUserId.set(user.id, params.password);
+    return user;
   }
 
   hasUsers(): boolean {
