@@ -65,18 +65,22 @@ export function calculateUserMetrics(userId: string, days: number = 30): UserMet
   const endDateStr = endDate.toISOString().split('T')[0];
 
   const sessions = store.getSessionsByUserAndDateRange(userId, startDateStr, endDateStr);
-  const targets = store.getTargetsByUserAndMonth(userId, endDateStr.substring(0, 7));
   const executions = store.getExecutionsByUserAndMonth(userId, endDateStr.substring(0, 7));
 
-  // Calculate execution metrics
+  // Calculate execution metrics from uploaded task definitions
   let totalExecutions = 0;
   let targetExecutions = 0;
   let executionAchievementRate = 0;
 
   if (executions.length > 0) {
     totalExecutions = executions.reduce((sum, e) => sum + e.total_executions, 0);
-    const executionTargets = targets.filter((t) => t.target_executions && t.target_executions > 0);
-    targetExecutions = executionTargets.reduce((sum, t) => sum + (t.target_executions || 0), 0);
+
+    const daysWithExecutions = new Set(executions.map((e) => e.execution_date)).size;
+    const perDayTargetExecutions = store
+      .getTaskTargetDefinitions()
+      .reduce((sum, task) => sum + task.target_daily, 0);
+
+    targetExecutions = Math.round(perDayTargetExecutions * daysWithExecutions);
     executionAchievementRate = targetExecutions > 0 ? (totalExecutions / targetExecutions) * 100 : 0;
   }
 

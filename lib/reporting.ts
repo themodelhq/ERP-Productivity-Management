@@ -1,11 +1,14 @@
 // Reporting and export utilities
 
 import { getStore } from './store';
-import { calculateUserMetrics, calculateDepartmentMetrics } from './analytics';
+import { calculateDailyMetrics, calculateUserMetrics } from './analytics';
+
+export type ReportPeriodType = 'daily' | 'weekly' | 'monthly';
 
 export interface PerformanceReport {
   report_date: string;
   report_period: string;
+  period_type: ReportPeriodType;
   total_users: number;
   team_metrics: Array<{
     name: string;
@@ -25,13 +28,15 @@ export interface PerformanceReport {
   recommendations: string[];
 }
 
-export function generateMonthlyReport(month: string): PerformanceReport {
+function buildReport(period: ReportPeriodType, referenceDate: string): PerformanceReport {
   const store = getStore();
   const agents = store.getUsersByRole('agent');
 
+  const days = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
+
   const teamMetrics = agents
     .map((agent) => {
-      const metrics = calculateUserMetrics(agent.id, 30);
+      const metrics = calculateUserMetrics(agent.id, days);
       return {
         name: agent.name,
         email: agent.email,
@@ -44,60 +49,66 @@ export function generateMonthlyReport(month: string): PerformanceReport {
     })
     .sort((a, b) => b.target_achievement - a.target_achievement);
 
-  const departmentMetrics = calculateDepartmentMetrics('Sales');
+  const distribution = {
+    excellent: teamMetrics.filter((m) => m.performance_rating === 'excellent').length,
+    good: teamMetrics.filter((m) => m.performance_rating === 'good').length,
+    average: teamMetrics.filter((m) => m.performance_rating === 'average').length,
+    needs_improvement: teamMetrics.filter((m) => m.performance_rating === 'needs_improvement').length,
+    critical: teamMetrics.filter((m) => m.performance_rating === 'critical').length,
+  };
 
   const avgAchievement =
-    teamMetrics.reduce((sum, m) => sum + m.target_achievement, 0) / teamMetrics.length;
+    teamMetrics.length > 0
+      ? teamMetrics.reduce((sum, m) => sum + m.target_achievement, 0) / teamMetrics.length
+      : 0;
 
-  // Generate recommendations based on data
+  const dailyMetrics = calculateDailyMetrics(referenceDate);
+
   const recommendations: string[] = [];
-
   if (avgAchievement < 60) {
-    recommendations.push(
-      'Team is underperforming. Consider reviewing workload distribution and providing additional support.',
-    );
-  } else if (avgAchievement >= 85) {
-    recommendations.push('Team is performing excellently. Consider recognizing top performers.');
+    recommendations.push('Team achievement is below threshold. Review workload and coaching plans.');
   }
-
-  const highIdleUsers = teamMetrics.filter((m) => m.idle_percentage > 20);
-  if (highIdleUsers.length > 0) {
-    recommendations.push(
-      `${highIdleUsers.length} team member(s) show high idle time. Review system lock settings.`,
-    );
+  if (dailyMetrics.avg_productivity < 300) {
+    recommendations.push('Average active minutes are low. Investigate blockers and process friction.');
   }
-
-  const decliningUsers = teamMetrics.filter((m) => m.trend === 'declining');
-  if (decliningUsers.length > 0) {
-    recommendations.push(
-      `${decliningUsers.length} team member(s) showing declining performance. Schedule 1-on-1s.`,
-    );
+  if (dailyMetrics.avg_idle_percentage > 20) {
+    recommendations.push('Idle percentage is high. Validate task allocation and break policies.');
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('Performance is stable. Continue monitoring and recognize top performers.');
   }
 
   return {
     report_date: new Date().toISOString().split('T')[0],
-    report_period: month,
+    report_period: referenceDate,
+    period_type: period,
     total_users: agents.length,
     team_metrics: teamMetrics,
     department_summary: {
-      department: 'Sales',
-      avg_productivity: departmentMetrics.avg_productivity,
-      avg_achievement: departmentMetrics.target_achievement_rate,
-      distribution: {
-        excellent: departmentMetrics.performance_distribution.excellent,
-        good: departmentMetrics.performance_distribution.good,
-        average: departmentMetrics.performance_distribution.average,
-        needs_improvement: departmentMetrics.performance_distribution.needs_improvement,
-        critical: departmentMetrics.performance_distribution.critical,
-      },
+      department: 'All',
+      avg_productivity: dailyMetrics.avg_productivity,
+      avg_achievement: Math.round(avgAchievement),
+      distribution,
     },
     recommendations,
   };
 }
 
-export function exportReportAsCSV(report: PerformanceReport): string {
-  let csv = 'Performance Report - ' + report.report_period + '\n\n';
+export function generateDailyReport(date: string): PerformanceReport {
+  return buildReport('daily', date);
+}
 
+export function generateWeeklyReport(date: string): PerformanceReport {
+  return buildReport('weekly', date);
+}
+
+export function generateMonthlyReport(month: string): PerformanceReport {
+  const referenceDate = `${month}-01`;
+  return buildReport('monthly', referenceDate);
+}
+
+export function exportReportAsCSV(report: PerformanceReport): string {
+  let csv = `Performance Report - ${report.period_type} (${report.report_period})\n\n`;
   csv += 'TEAM METRICS\n';
   csv += 'Name,Email,Achievement %,Consistency %,Idle %,Rating,Trend\n';
 
@@ -105,11 +116,11 @@ export function exportReportAsCSV(report: PerformanceReport): string {
     csv += `${m.name},${m.email},${m.target_achievement},${m.consistency_score},${m.idle_percentage},${m.performance_rating},${m.trend}\n`;
   });
 
-  csv += '\n\nDEPARTMENT SUMMARY\n';
-  csv += `Department,Avg Productivity,Avg Achievement\n`;
+  csv += '\nDEPARTMENT SUMMARY\n';
+  csv += 'Department,Avg Productivity,Avg Achievement\n';
   csv += `${report.department_summary.department},${report.department_summary.avg_productivity},${report.department_summary.avg_achievement}\n`;
 
-  csv += '\n\nRECOMMENDATIONS\n';
+  csv += '\nRECOMMENDATIONS\n';
   report.recommendations.forEach((rec) => {
     csv += `- ${rec}\n`;
   });

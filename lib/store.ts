@@ -11,189 +11,152 @@ import {
   ActivityLog,
   AuditLog,
   UserRole,
-  PerformanceRating,
   AgentExecution,
   BulkExecutionUpload,
+  TaskTargetDefinition,
 } from './db-schema';
+
+interface PersistedStoreSnapshot {
+  users: User[];
+  passwordsByUserId: Array<[string, string]>;
+  sessions: ProductivitySession[];
+  targets: ProductivityTarget[];
+  evaluations: PerformanceEvaluation[];
+  uploads: BulkTargetUpload[];
+  executions: AgentExecution[];
+  executionUploads: BulkExecutionUpload[];
+  taskTargetDefinitions: TaskTargetDefinition[];
+}
+
+const STORAGE_KEY = 'erp-data-store-v1';
+
+function toDate(value: string | Date | undefined): Date | undefined {
+  if (!value) return undefined;
+  return value instanceof Date ? value : new Date(value);
+}
 
 class DataStore {
   private users: Map<string, User> = new Map();
+  private passwordsByUserId: Map<string, string> = new Map();
   private sessions: Map<string, ProductivitySession> = new Map();
   private targets: Map<string, ProductivityTarget> = new Map();
   private evaluations: Map<string, PerformanceEvaluation> = new Map();
   private uploads: Map<string, BulkTargetUpload> = new Map();
   private executions: Map<string, AgentExecution> = new Map();
   private executionUploads: Map<string, BulkExecutionUpload> = new Map();
+  private taskTargetDefinitions: Map<string, TaskTargetDefinition> = new Map();
   private activityLogs: ActivityLog[] = [];
   private auditLogs: AuditLog[] = [];
 
   constructor() {
-    this.initializeDemo();
+    this.hydrate();
   }
 
-  private initializeDemo() {
-    // Create demo users
-    const manager: User = {
-      id: 'manager-1',
-      email: 'manager@company.com',
-      name: 'John Manager',
-      role: 'manager',
-      department: 'Sales',
-      created_at: new Date('2024-01-01'),
-      updated_at: new Date(),
-      is_active: true,
-      settings: {
-        notifications_enabled: true,
-        idle_detection_enabled: true,
-        privacy_mode: false,
-      },
-    };
+  private get canPersist(): boolean {
+    return typeof window !== 'undefined' && !!window.localStorage;
+  }
 
-    const admin: User = {
-      id: 'admin-1',
-      email: 'admin@company.com',
-      name: 'Admin User',
-      role: 'admin',
-      created_at: new Date('2024-01-01'),
-      updated_at: new Date(),
-      is_active: true,
-      settings: {
-        notifications_enabled: true,
-        idle_detection_enabled: true,
-        privacy_mode: false,
-      },
-    };
+  private hydrate(): void {
+    if (!this.canPersist) return;
 
-    const agents: User[] = [
-      {
-        id: 'agent-1',
-        email: 'agent1@company.com',
-        name: 'Alice Johnson',
-        role: 'agent',
-        department: 'Sales',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-      {
-        id: 'agent-2',
-        email: 'agent2@company.com',
-        name: 'Bob Smith',
-        role: 'agent',
-        department: 'Sales',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-      {
-        id: 'agent-3',
-        email: 'agent3@company.com',
-        name: 'Carol White',
-        role: 'agent',
-        department: 'Support',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-    ];
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
 
-    [manager, admin, ...agents].forEach((user) => {
-      this.users.set(user.id, user);
-    });
+    try {
+      const parsed = JSON.parse(raw) as PersistedStoreSnapshot;
 
-    // Create demo sessions for the past 30 days
-    const today = new Date();
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-
-      agents.forEach((agent) => {
-        const sessionId = `session-${agent.id}-${dateStr}`;
-        const startTime = new Date(date);
-        startTime.setHours(9, 0, 0);
-
-        const totalMinutes = Math.random() > 0.3 ? 420 : 360 + Math.random() * 60;
-        const idleMinutes = totalMinutes * (0.1 + Math.random() * 0.2);
-        const activeMinutes = totalMinutes - idleMinutes;
-
-        const session: ProductivitySession = {
-          id: sessionId,
-          user_id: agent.id,
-          date: dateStr,
-          start_time: startTime,
-          end_time: new Date(startTime.getTime() + totalMinutes * 60000),
-          total_minutes: Math.round(totalMinutes),
-          active_minutes: Math.round(activeMinutes),
-          idle_minutes: Math.round(idleMinutes),
-          idle_events: [],
-          status: 'completed',
-          activities: ['Salesforce CRM', 'Email', 'Documentation', 'Calls'],
-          created_at: startTime,
-          updated_at: new Date(),
-        };
-
-        this.sessions.set(sessionId, session);
-
-        // Create target
-        const targetId = `target-${agent.id}-${dateStr}`;
-        const target: ProductivityTarget = {
-          id: targetId,
-          user_id: agent.id,
-          target_date: dateStr,
-          target_minutes: 420,
-          status: session.total_minutes >= 400 ? 'achieved' : 'missed',
-          created_at: startTime,
-          updated_at: new Date(),
-        };
-
-        this.targets.set(targetId, target);
+      parsed.users.forEach((user) => {
+        this.users.set(user.id, {
+          ...user,
+          created_at: toDate(user.created_at)!,
+          updated_at: toDate(user.updated_at)!,
+        });
       });
+
+      parsed.passwordsByUserId.forEach(([id, password]) => {
+        this.passwordsByUserId.set(id, password);
+      });
+
+      parsed.sessions.forEach((session) => {
+        this.sessions.set(session.id, {
+          ...session,
+          start_time: toDate(session.start_time)!,
+          end_time: toDate(session.end_time),
+          created_at: toDate(session.created_at)!,
+          updated_at: toDate(session.updated_at)!,
+          idle_events: (session.idle_events || []).map((event) => ({
+            ...event,
+            start_time: toDate(event.start_time)!,
+            end_time: toDate(event.end_time)!,
+          })),
+        });
+      });
+
+      parsed.targets.forEach((target) => {
+        this.targets.set(target.id, {
+          ...target,
+          created_at: toDate(target.created_at)!,
+          updated_at: toDate(target.updated_at)!,
+        });
+      });
+
+      parsed.evaluations.forEach((evaluation) => {
+        this.evaluations.set(evaluation.id, {
+          ...evaluation,
+          created_at: toDate(evaluation.created_at)!,
+          updated_at: toDate(evaluation.updated_at)!,
+        });
+      });
+
+      parsed.uploads.forEach((upload) => {
+        this.uploads.set(upload.id, {
+          ...upload,
+          upload_date: toDate(upload.upload_date)!,
+        });
+      });
+
+      parsed.executions.forEach((execution) => {
+        this.executions.set(execution.id, {
+          ...execution,
+          created_at: toDate(execution.created_at)!,
+          updated_at: toDate(execution.updated_at)!,
+        });
+      });
+
+      parsed.executionUploads.forEach((upload) => {
+        this.executionUploads.set(upload.id, {
+          ...upload,
+          upload_date: toDate(upload.upload_date)!,
+        });
+      });
+
+      parsed.taskTargetDefinitions.forEach((definition) => {
+        const ownerId = definition.owner_id || 'unknown';
+        const normalized = { ...definition, owner_id: ownerId };
+        const key = `${ownerId}::${definition.task_name.trim().toLowerCase()}`;
+        this.taskTargetDefinitions.set(key, normalized);
+      });
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
     }
+  }
 
-    // Create monthly evaluations
-    agents.forEach((agent) => {
-      const evaluation: PerformanceEvaluation = {
-        id: `eval-${agent.id}-2025-02`,
-        user_id: agent.id,
-        evaluation_period: '2025-02',
-        total_sessions: 20,
-        target_achievement_rate: 75 + Math.random() * 25,
-        average_daily_productivity: 350 + Math.random() * 100,
-        idle_duration_percentage: 10 + Math.random() * 15,
-        consistency_score: 70 + Math.random() * 30,
-        performance_rating: (['excellent', 'good', 'average'] as PerformanceRating[])[
-          Math.floor(Math.random() * 3)
-        ],
-        actionable_insights: [
-          'Maintain consistent daily productivity levels',
-          'Reduce idle time during peak hours',
-          'Focus on email response times',
-        ],
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
+  private persist(): void {
+    if (!this.canPersist) return;
 
-      this.evaluations.set(evaluation.id, evaluation);
-    });
+    const snapshot: PersistedStoreSnapshot = {
+      users: Array.from(this.users.values()),
+      passwordsByUserId: Array.from(this.passwordsByUserId.entries()),
+      sessions: Array.from(this.sessions.values()),
+      targets: Array.from(this.targets.values()),
+      evaluations: Array.from(this.evaluations.values()),
+      uploads: Array.from(this.uploads.values()),
+      executions: Array.from(this.executions.values()),
+      executionUploads: Array.from(this.executionUploads.values()),
+      taskTargetDefinitions: Array.from(this.taskTargetDefinitions.values()),
+    };
+
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }
 
   // User operations
@@ -202,10 +165,84 @@ class DataStore {
   }
 
   getUserByEmail(email: string): User | undefined {
+    const normalizedEmail = email.trim().toLowerCase();
     for (const user of this.users.values()) {
-      if (user.email === email) return user;
+      if (user.email === normalizedEmail) return user;
     }
     return undefined;
+  }
+
+  hasUsers(): boolean {
+    return this.users.size > 0;
+  }
+
+  hasAdmin(): boolean {
+    return Array.from(this.users.values()).some((u) => u.role === 'admin');
+  }
+
+  verifyCredentials(email: string, password: string): User | null {
+    const user = this.getUserByEmail(email);
+    if (!user || !user.is_active) {
+      return null;
+    }
+
+    const storedPassword = this.passwordsByUserId.get(user.id);
+    if (!storedPassword || storedPassword !== password) {
+      return null;
+    }
+
+    return user;
+  }
+
+  createUser(params: {
+    email: string;
+    name: string;
+    role: UserRole;
+    password: string;
+    department?: string;
+    manager_id?: string;
+  }): User {
+    const normalizedEmail = params.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error('Email is required');
+    }
+
+    if (this.getUserByEmail(normalizedEmail)) {
+      throw new Error('A user with this email already exists');
+    }
+
+    if (params.password.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+
+    const normalizedName = params.name.trim();
+    if (!normalizedName) {
+      throw new Error('Name is required');
+    }
+
+    const now = new Date();
+    const id = `user-${crypto.randomUUID()}`;
+    const user: User = {
+      id,
+      email: normalizedEmail,
+      name: normalizedName,
+      role: params.role,
+      department: params.department,
+      manager_id: params.manager_id,
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      settings: {
+        notifications_enabled: true,
+        idle_detection_enabled: true,
+        privacy_mode: false,
+      },
+    };
+
+    this.users.set(user.id, user);
+    this.passwordsByUserId.set(user.id, params.password);
+    this.persist();
+    return user;
   }
 
   getAllUsers(): User[] {
@@ -225,7 +262,46 @@ class DataStore {
     if (!user) return undefined;
     const updated = { ...user, ...updates, updated_at: new Date() };
     this.users.set(id, updated);
+    this.persist();
     return updated;
+  }
+
+  setTaskTargetDefinitions(ownerId: string, definitions: Omit<TaskTargetDefinition, 'owner_id'>[]): void {
+    const ownerPrefix = `${ownerId}::`;
+    Array.from(this.taskTargetDefinitions.keys()).forEach((key) => {
+      if (key.startsWith(ownerPrefix)) {
+        this.taskTargetDefinitions.delete(key);
+      }
+    });
+
+    definitions.forEach((definition) => {
+      const normalizedTaskName = definition.task_name.trim();
+      const key = `${ownerId}::${normalizedTaskName.toLowerCase()}`;
+      this.taskTargetDefinitions.set(key, {
+        ...definition,
+        task_name: normalizedTaskName,
+        owner_id: ownerId,
+      });
+    });
+    this.persist();
+  }
+
+  getTaskTargetDefinitions(ownerId?: string): TaskTargetDefinition[] {
+    const definitions = Array.from(this.taskTargetDefinitions.values());
+    if (!ownerId) return definitions;
+    return definitions.filter((definition) => definition.owner_id === ownerId);
+  }
+
+  getTaskTargetDefinition(taskName: string, ownerId?: string): TaskTargetDefinition | undefined {
+    const normalizedTaskName = taskName.trim().toLowerCase();
+
+    if (ownerId) {
+      return this.taskTargetDefinitions.get(`${ownerId}::${normalizedTaskName}`);
+    }
+
+    return Array.from(this.taskTargetDefinitions.values()).find(
+      (definition) => definition.task_name.toLowerCase() === normalizedTaskName,
+    );
   }
 
   // Session operations
@@ -249,6 +325,7 @@ class DataStore {
 
   upsertSession(session: ProductivitySession): ProductivitySession {
     this.sessions.set(session.id, { ...session, updated_at: new Date() });
+    this.persist();
     return this.sessions.get(session.id)!;
   }
 
@@ -273,6 +350,7 @@ class DataStore {
 
   upsertTarget(target: ProductivityTarget): ProductivityTarget {
     this.targets.set(target.id, { ...target, updated_at: new Date() });
+    this.persist();
     return this.targets.get(target.id)!;
   }
 
@@ -291,12 +369,14 @@ class DataStore {
 
   upsertEvaluation(evaluation: PerformanceEvaluation): PerformanceEvaluation {
     this.evaluations.set(evaluation.id, { ...evaluation, updated_at: new Date() });
+    this.persist();
     return this.evaluations.get(evaluation.id)!;
   }
 
   // Bulk upload operations
   recordBulkUpload(upload: BulkTargetUpload): BulkTargetUpload {
     this.uploads.set(upload.id, upload);
+    this.persist();
     return upload;
   }
 
@@ -329,11 +409,13 @@ class DataStore {
 
   upsertExecution(execution: AgentExecution): AgentExecution {
     this.executions.set(execution.id, { ...execution, updated_at: new Date() });
+    this.persist();
     return this.executions.get(execution.id)!;
   }
 
   recordBulkExecutionUpload(upload: BulkExecutionUpload): BulkExecutionUpload {
     this.executionUploads.set(upload.id, upload);
+    this.persist();
     return upload;
   }
 

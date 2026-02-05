@@ -17,6 +17,7 @@ export function ManagerDashboard() {
   const [departmentMetrics, setDepartmentMetrics] = useState<any>(null);
   const [dailyMetrics, setDailyMetrics] = useState<any>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (!session) return;
@@ -42,10 +43,9 @@ export function ManagerDashboard() {
     setDepartmentMetrics(deptMetrics);
 
     // Daily metrics
-    const today = new Date().toISOString().split('T')[0];
-    const daily = calculateDailyMetrics(today);
+    const daily = calculateDailyMetrics(selectedDate);
     setDailyMetrics(daily);
-  }, [session]);
+  }, [session, selectedDate]);
 
   if (!session) {
     return <div>Loading...</div>;
@@ -80,6 +80,43 @@ export function ManagerDashboard() {
     .slice(0, 3);
 
   const needsAttention = [...teamMetrics].filter((m) => m.target_achievement_rate < 60).sort((a, b) => a.target_achievement_rate - b.target_achievement_rate);
+
+
+  const selectedAgentTaskRows = selectedAgent
+    ? getStore()
+        .getExecutionsByDate(selectedDate)
+        .filter((exec) => exec.user_id === selectedAgent)
+        .flatMap((exec) =>
+          Object.entries(exec.executions_by_type || {}).map(([taskName, count]) => {
+            const taskDefinition = getStore().getTaskTargetDefinition(taskName);
+            const usedMinutes = (taskDefinition?.average_unit_execution_time_minutes || 0) * count;
+            return { task_name: taskName, count, used_minutes: Math.round(usedMinutes) };
+          }),
+        )
+    : [];
+
+  const selectedAgentDailyMinutes = selectedAgentTaskRows.reduce((sum, row) => sum + row.used_minutes, 0);
+
+  const dailyAgentSummary = getStore()
+    .getUsersByRole('agent')
+    .map((agent) => {
+      const taskRows = getStore()
+        .getExecutionsByDate(selectedDate)
+        .filter((exec) => exec.user_id === agent.id)
+        .flatMap((exec) =>
+          Object.entries(exec.executions_by_type || {}).map(([taskName, count]) => {
+            const taskDefinition = getStore().getTaskTargetDefinition(taskName);
+            return (taskDefinition?.average_unit_execution_time_minutes || 0) * count;
+          }),
+        );
+
+      return {
+        agent_id: agent.id,
+        agent_name: agent.name,
+        minutes_used: Math.round(taskRows.reduce((sum, v) => sum + v, 0)),
+      };
+    });
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -219,8 +256,29 @@ export function ManagerDashboard() {
               <CardHeader>
                 <CardTitle>Team Members Performance</CardTitle>
                 <CardDescription>Detailed metrics for each team member</CardDescription>
+                <div className="mt-3 flex items-center gap-2">
+                  <label className="text-sm text-slate-600">Date:</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="px-3 py-1 border border-slate-300 rounded text-sm"
+                  />
+                </div>
               </CardHeader>
               <CardContent>
+                <div className="mb-4 rounded border bg-slate-50 p-3">
+                  <p className="font-semibold text-sm mb-2">All Agents for {selectedDate}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                    {dailyAgentSummary.map((row) => (
+                      <div key={row.agent_id} className="rounded border bg-white px-3 py-2">
+                        <p className="font-medium">{row.agent_name}</p>
+                        <p>{row.minutes_used} / 420 minutes</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   {teamMetrics.map((member) => (
                     <div
@@ -277,6 +335,22 @@ export function ManagerDashboard() {
                     </div>
                   ))}
                 </div>
+
+                {selectedAgent && (
+                  <div className="mt-4 rounded border p-4 bg-white">
+                    <h4 className="font-semibold">Selected Agent Daily Task Usage ({selectedDate})</h4>
+                    <p className="text-sm text-slate-600 mb-2">{selectedAgentDailyMinutes} / 420 minutes used</p>
+                    <div className="space-y-2 text-sm">
+                      {selectedAgentTaskRows.length === 0 && <p>No tasks recorded for this date.</p>}
+                      {selectedAgentTaskRows.map((row, idx) => (
+                        <div key={`${row.task_name}-${idx}`} className="flex justify-between border-b pb-1">
+                          <span>{row.task_name} ({row.count})</span>
+                          <span>{row.used_minutes} mins</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
