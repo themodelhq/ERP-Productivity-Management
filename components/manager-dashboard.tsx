@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Users, TrendingUp, AlertTriangle, Download, LogOut } from 'lucide-react';
 import { ReportingPanel } from './reporting-panel';
+import { TargetUpload } from './target-upload';
+import { ExecutionUpload } from './execution-upload';
 
 export function ManagerDashboard() {
   const { session, logout } = useAuth();
@@ -23,7 +25,11 @@ export function ManagerDashboard() {
     if (!session) return;
 
     const store = getStore();
-    const teamMembers = store.getUsersByManager(session.user_id);
+    const assignedTeamMembers = store.getUsersByManager(session.user_id);
+    const teamMembers =
+      assignedTeamMembers.length > 0
+        ? assignedTeamMembers
+        : store.getUsersByRole('agent');
 
     // Calculate metrics for all team members
     const metrics = teamMembers.map((member) => {
@@ -88,7 +94,7 @@ export function ManagerDashboard() {
         .filter((exec) => exec.user_id === selectedAgent)
         .flatMap((exec) =>
           Object.entries(exec.executions_by_type || {}).map(([taskName, count]) => {
-            const taskDefinition = getStore().getTaskTargetDefinition(taskName);
+            const taskDefinition = getStore().getTaskTargetDefinition(taskName, session.user_id);
             const usedMinutes = (taskDefinition?.average_unit_execution_time_minutes || 0) * count;
             return { task_name: taskName, count, used_minutes: Math.round(usedMinutes) };
           }),
@@ -105,7 +111,7 @@ export function ManagerDashboard() {
         .filter((exec) => exec.user_id === agent.id)
         .flatMap((exec) =>
           Object.entries(exec.executions_by_type || {}).map(([taskName, count]) => {
-            const taskDefinition = getStore().getTaskTargetDefinition(taskName);
+            const taskDefinition = getStore().getTaskTargetDefinition(taskName, session.user_id);
             return (taskDefinition?.average_unit_execution_time_minutes || 0) * count;
           }),
         );
@@ -190,11 +196,13 @@ export function ManagerDashboard() {
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="team">Team Performance</TabsTrigger>
             <TabsTrigger value="alerts">Alerts</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="targets">Targets Upload</TabsTrigger>
+            <TabsTrigger value="executions">Execution Upload</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -404,6 +412,14 @@ export function ManagerDashboard() {
           {/* Reports Tab */}
           <TabsContent value="reports" className="space-y-4">
             <ReportingPanel managerEmail={session.email} />
+          </TabsContent>
+
+          <TabsContent value="targets" className="space-y-4">
+            <TargetUpload />
+          </TabsContent>
+
+          <TabsContent value="executions" className="space-y-4">
+            <ExecutionUpload />
           </TabsContent>
         </Tabs>
       </div>
