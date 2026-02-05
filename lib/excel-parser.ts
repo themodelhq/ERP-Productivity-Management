@@ -32,20 +32,9 @@ async function fileToRows(file: File): Promise<string[][]> {
   const extension = file.name.toLowerCase().split('.').pop();
 
   if (extension === 'xlsx' || extension === 'xls') {
-    const xlsx = await import('xlsx');
-    const buffer = await file.arrayBuffer();
-    const workbook = xlsx.read(buffer, { type: 'array' });
-    const firstSheetName = workbook.SheetNames[0];
-    const firstSheet = workbook.Sheets[firstSheetName];
-    const rows = xlsx.utils.sheet_to_json<(string | number | null)[]>(firstSheet, {
-      header: 1,
-      raw: false,
-      defval: '',
-    });
-
-    return rows
-      .map((row) => row.map((cell) => String(cell ?? '').trim()))
-      .filter((row) => row.some((cell) => cell.length > 0));
+    throw new Error(
+      'Excel parsing requires an optional parser dependency that is blocked in this deployment. Please upload CSV for now.',
+    );
   }
 
   const text = await file.text();

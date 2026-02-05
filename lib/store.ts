@@ -159,32 +159,13 @@ class DataStore {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }
 
-  createUser(params: {
-    email: string;
-    name: string;
-    role: UserRole;
-    password: string;
-    department?: string;
-    manager_id?: string;
-  }): User {
-    const normalizedEmail = params.email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      throw new Error('Email is required');
-    }
+    return user;
+  }
 
   getUserByEmail(email: string): User | undefined {
     const normalizedEmail = email.trim().toLowerCase();
     for (const user of this.users.values()) {
       if (user.email === normalizedEmail) return user;
-    }
-
-    if (params.password.length < 8) {
-      throw new Error('Password must be at least 8 characters long');
-    }
-
-    const normalizedName = params.name.trim();
-    if (!normalizedName) {
-      throw new Error('Name is required');
     }
 
     const now = new Date();
@@ -208,6 +189,7 @@ class DataStore {
 
     this.users.set(user.id, user);
     this.passwordsByUserId.set(user.id, params.password);
+    this.persist();
     return user;
   }
 
