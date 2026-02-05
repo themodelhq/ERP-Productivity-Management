@@ -61,6 +61,13 @@ export interface ProductivityTarget {
   updated_at: Date;
 }
 
+export interface TaskTargetDefinition {
+  task_name: string;
+  average_unit_execution_time_minutes: number;
+  target_daily: number;
+  owner_id: string;
+}
+
 export interface AgentExecution {
   id: string;
   user_id: string;
