@@ -2,7 +2,7 @@
 
 import type { TaskTargetDefinition } from './db-schema';
 
-export interface TargetImportRow extends TaskTargetDefinition {}
+export interface TargetImportRow extends Omit<TaskTargetDefinition, 'owner_id'> {}
 
 export interface ExecutionImportRow {
   agent_name: string;
@@ -18,7 +18,7 @@ export interface ImportResult<T = TargetImportRow> {
   rows_failed: number;
   errors: Array<{
     row: number;
-    identifier: string; // task_name for target rows, agent_name for execution rows
+    identifier: string;
     error: string;
   }>;
   imported_data: T[];
@@ -28,7 +28,27 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-function parseCsv(text: string): string[][] {
+async function fileToRows(file: File): Promise<string[][]> {
+  const extension = file.name.toLowerCase().split('.').pop();
+
+  if (extension === 'xlsx' || extension === 'xls') {
+    const xlsx = await import('xlsx');
+    const buffer = await file.arrayBuffer();
+    const workbook = xlsx.read(buffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const firstSheet = workbook.Sheets[firstSheetName];
+    const rows = xlsx.utils.sheet_to_json<(string | number | null)[]>(firstSheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+    });
+
+    return rows
+      .map((row) => row.map((cell) => String(cell ?? '').trim()))
+      .filter((row) => row.some((cell) => cell.length > 0));
+  }
+
+  const text = await file.text();
   return text
     .split('\n')
     .map((line) => line.trim())
@@ -51,7 +71,7 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
   };
 
   try {
-    const rows = parseCsv(await file.text());
+    const rows = await fileToRows(file);
     if (rows.length === 0) {
       result.errors.push({ row: 0, identifier: 'unknown', error: 'File is empty' });
       return result;
@@ -70,13 +90,13 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
     if (
       agentNameIndex === undefined ||
       taskNameIndex === undefined ||
-      numberTreatedIndex === undefined
+      numberTreatedIndex === undefined ||
+      executionDateIndex === undefined
     ) {
       result.errors.push({
         row: 1,
         identifier: 'header',
-        error:
-          'Invalid header. Expected columns: Agent Name, Task Name, Number Treated (execution_date optional)',
+        error: 'Invalid header. Expected columns: Agent Name, Task Name, Number Treated, execution_date',
       });
       return result;
     }
@@ -88,7 +108,7 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
       const agentName = row[agentNameIndex] || '';
       const taskName = row[taskNameIndex] || '';
       const numberTreated = parseInt(row[numberTreatedIndex] || '', 10);
-      const executionDate = executionDateIndex !== undefined ? row[executionDateIndex] : getTodayDateString();
+      const executionDate = row[executionDateIndex] || getTodayDateString();
 
       if (!agentName || !taskName) {
         result.rows_failed++;
@@ -152,7 +172,7 @@ export async function parseExcelFile(file: File): Promise<ImportResult<TargetImp
   };
 
   try {
-    const rows = parseCsv(await file.text());
+    const rows = await fileToRows(file);
     if (rows.length === 0) {
       result.errors.push({ row: 0, identifier: 'unknown', error: 'File is empty' });
       return result;

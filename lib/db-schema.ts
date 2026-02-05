@@ -65,6 +65,7 @@ export interface TaskTargetDefinition {
   task_name: string;
   average_unit_execution_time_minutes: number;
   target_daily: number;
+  owner_id: string;
 }
 
 export interface AgentExecution {

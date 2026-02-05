@@ -5,6 +5,7 @@ import React from "react"
 import { useState } from 'react';
 import { parseExecutionFile, type ExecutionImportRow, type ImportResult } from '@/lib/excel-parser';
 import { getStore } from '@/lib/store';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
@@ -20,6 +21,7 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<ImportResult<ExecutionImportRow> | null>(null);
+  const { session } = useAuth();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -39,8 +41,12 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
 
       if (importResult.success) {
         const store = getStore();
+        if (!session) {
+          throw new Error('You must be logged in to upload executions');
+        }
+
         const allUsers = store.getAllUsers();
-        const currentUser = allUsers[0];
+        const currentUser = store.getUser(session.user_id);
 
         const usedMinutesByUserAndDate = new Map<string, number>();
 
@@ -50,7 +56,7 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
             return;
           }
 
-          const taskDefinition = store.getTaskTargetDefinition(row.task_name);
+          const taskDefinition = store.getTaskTargetDefinition(row.task_name, session.user_id);
           if (!taskDefinition) {
             return;
           }
@@ -151,14 +157,14 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
           Upload Agent Sheet
         </CardTitle>
         <CardDescription>
-          Upload a CSV with Agent Name, Task Name, Number Treated (execution_date optional).
+          Upload a file with Agent Name, Task Name, Number Treated, execution_date.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h4 className="font-semibold text-blue-900 text-sm mb-2">File Format:</h4>
           <div className="text-sm text-blue-800 font-mono bg-white p-2 rounded border border-blue-100">
-            Agent Name,Task Name,Number Treated,execution_date (optional)
+            Agent Name,Task Name,Number Treated,execution_date
             <br />
             Alice Johnson,Sales Calls,45,2025-02-05
             <br />
@@ -169,7 +175,7 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
         <div className="flex items-center gap-3">
           <input
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.xlsx,.xls"
             onChange={handleFileSelect}
             disabled={isProcessing}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"

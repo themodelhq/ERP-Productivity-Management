@@ -5,6 +5,7 @@ import React from "react"
 import { useState } from 'react';
 import { parseExcelFile, type TargetImportRow, type ImportResult } from '@/lib/excel-parser';
 import { getStore } from '@/lib/store';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
@@ -18,6 +19,7 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<ImportResult<TargetImportRow> | null>(null);
+  const { session } = useAuth();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -37,9 +39,13 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
 
       if (importResult.success) {
         const store = getStore();
-        const currentUser = store.getAllUsers().find((u) => u.role === 'admin') || store.getAllUsers()[0];
+        if (!session) {
+          throw new Error('You must be logged in to upload targets');
+        }
 
-        store.setTaskTargetDefinitions(importResult.imported_data);
+        const currentUser = store.getUser(session.user_id);
+
+        store.setTaskTargetDefinitions(session.user_id, importResult.imported_data);
 
         const upload: BulkTargetUpload = {
           id: `target-upload-${Date.now()}`,
@@ -96,7 +102,7 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
         <div className="flex items-center gap-3">
           <input
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.xlsx,.xls"
             onChange={handleFileSelect}
             disabled={isProcessing}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
