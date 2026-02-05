@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Upload, Users, Settings, LogOut, Download } from 'lucide-react';
+import { Upload, Users, Settings, LogOut } from 'lucide-react';
 import { TargetUpload } from '@/components/target-upload';
 import { ExecutionUpload } from '@/components/execution-upload';
 
@@ -18,7 +17,12 @@ export function AdminDashboard() {
   const { session, logout } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [systemStats, setSystemStats] = useState<any>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager'>('admin');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [userCreateMessage, setUserCreateMessage] = useState('');
 
   useEffect(() => {
     const store = getStore();
@@ -38,13 +42,38 @@ export function AdminDashboard() {
     });
   }, []);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    setUploadFile(file);
-    // In production, parse Excel file and import targets
-    console.log('[v0] File selected:', file.name);
+
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserCreateMessage('');
+
+    try {
+      getStore().createUser({
+        name: newUserName,
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+        department: newUserRole === 'manager' ? newUserDepartment : undefined,
+      });
+
+      const allUsers = getStore().getAllUsers();
+      setUsers(allUsers);
+      setSystemStats({
+        total_users: allUsers.length,
+        agents: allUsers.filter((u) => u.role === 'agent').length,
+        managers: allUsers.filter((u) => u.role === 'manager').length,
+        admins: allUsers.filter((u) => u.role === 'admin').length,
+        active_users: allUsers.filter((u) => u.is_active).length,
+      });
+      setUserCreateMessage(`${newUserRole === 'admin' ? 'Admin' : 'Manager'} account created successfully.`);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserDepartment('');
+    } catch (error) {
+      setUserCreateMessage(error instanceof Error ? error.message : 'Failed to create account');
+    }
   };
 
   if (!session) {
@@ -56,12 +85,6 @@ export function AdminDashboard() {
     manager: users.filter((u) => u.role === 'manager'),
     admin: users.filter((u) => u.role === 'admin'),
   };
-
-  const roleDistribution = [
-    { name: 'Agents', value: usersByRole.agent.length, fill: '#3b82f6' },
-    { name: 'Managers', value: usersByRole.manager.length, fill: '#10b981' },
-    { name: 'Admins', value: usersByRole.admin.length, fill: '#8b5cf6' },
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -157,6 +180,43 @@ export function AdminDashboard() {
               <CardHeader>
                 <CardTitle>User Management</CardTitle>
                 <CardDescription>View and manage all system users</CardDescription>
+              <form onSubmit={handleCreateUser} className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+                <Input
+                  placeholder="Full name"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                />
+                <Input
+                  type="email"
+                  placeholder="user@company.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="Minimum 8 characters"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                />
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'manager')}
+                  className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                </select>
+                <Button type="submit">Create Account</Button>
+                {newUserRole === 'manager' && (
+                  <Input
+                    placeholder="Department (for manager)"
+                    value={newUserDepartment}
+                    onChange={(e) => setNewUserDepartment(e.target.value)}
+                    className="md:col-span-2"
+                  />
+                )}
+              </form>
+              {userCreateMessage && <p className="text-sm mt-2 text-slate-700">{userCreateMessage}</p>}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
