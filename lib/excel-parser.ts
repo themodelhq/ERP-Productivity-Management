@@ -1,17 +1,14 @@
 // Excel parsing utilities for bulk target and execution uploads
 
-export interface TargetImportRow {
-  email: string;
-  target_date: string;
-  target_minutes: number;
-  target_executions?: number;
-}
+import type { TaskTargetDefinition } from './db-schema';
+
+export interface TargetImportRow extends TaskTargetDefinition {}
 
 export interface ExecutionImportRow {
   agent_name: string;
+  task_name: string;
+  number_treated: number;
   execution_date: string;
-  total_executions: number;
-  task_type?: string;
 }
 
 export interface ImportResult<T = TargetImportRow> {
@@ -21,10 +18,26 @@ export interface ImportResult<T = TargetImportRow> {
   rows_failed: number;
   errors: Array<{
     row: number;
-    identifier: string; // email for targets, agent_name for executions
+    identifier: string; // task_name for target rows, agent_name for execution rows
     error: string;
   }>;
   imported_data: T[];
+}
+
+function normalizeHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function parseCsv(text: string): string[][] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(',').map((cell) => cell.trim()));
+}
+
+function getTodayDateString(): string {
+  return new Date().toISOString().split('T')[0];
 }
 
 export async function parseExecutionFile(file: File): Promise<ImportResult<ExecutionImportRow>> {
@@ -38,32 +51,55 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
   };
 
   try {
-    const text = await file.text();
-    const lines = text.split('\n');
+    const rows = parseCsv(await file.text());
+    if (rows.length === 0) {
+      result.errors.push({ row: 0, identifier: 'unknown', error: 'File is empty' });
+      return result;
+    }
 
-    // Skip header row
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
+    const headerIndexMap = rows[0].reduce<Record<string, number>>((acc, header, idx) => {
+      acc[normalizeHeader(header)] = idx;
+      return acc;
+    }, {});
 
+    const agentNameIndex = headerIndexMap.agent_name;
+    const taskNameIndex = headerIndexMap.task_name;
+    const numberTreatedIndex = headerIndexMap.number_treated;
+    const executionDateIndex = headerIndexMap.execution_date;
+
+    if (
+      agentNameIndex === undefined ||
+      taskNameIndex === undefined ||
+      numberTreatedIndex === undefined
+    ) {
+      result.errors.push({
+        row: 1,
+        identifier: 'header',
+        error:
+          'Invalid header. Expected columns: Agent Name, Task Name, Number Treated (execution_date optional)',
+      });
+      return result;
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
       result.rows_processed++;
-      const parts = lines[i].split(',').map((v) => v.trim());
-      const agentName = parts[0];
-      const executionDate = parts[1];
-      const totalExecutions = parseInt(parts[2], 10);
-      const taskType = parts[3] || 'general';
 
-      // Validate row
-      if (!agentName || !executionDate) {
+      const agentName = row[agentNameIndex] || '';
+      const taskName = row[taskNameIndex] || '';
+      const numberTreated = parseInt(row[numberTreatedIndex] || '', 10);
+      const executionDate = executionDateIndex !== undefined ? row[executionDateIndex] : getTodayDateString();
+
+      if (!agentName || !taskName) {
         result.rows_failed++;
         result.errors.push({
           row: i + 1,
           identifier: agentName || 'N/A',
-          error: 'Missing agent name or date',
+          error: 'Missing agent name or task name',
         });
         continue;
       }
 
-      // Validate date format
       if (!/^\d{4}-\d{2}-\d{2}$/.test(executionDate)) {
         result.rows_failed++;
         result.errors.push({
@@ -74,13 +110,12 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
         continue;
       }
 
-      // Validate executions number
-      if (isNaN(totalExecutions) || totalExecutions < 0) {
+      if (isNaN(numberTreated) || numberTreated < 0) {
         result.rows_failed++;
         result.errors.push({
           row: i + 1,
           identifier: agentName,
-          error: 'Invalid execution count (must be a positive number)',
+          error: 'Invalid Number Treated value',
         });
         continue;
       }
@@ -88,16 +123,15 @@ export async function parseExecutionFile(file: File): Promise<ImportResult<Execu
       result.rows_successful++;
       result.imported_data.push({
         agent_name: agentName,
+        task_name: taskName,
+        number_treated: numberTreated,
         execution_date: executionDate,
-        total_executions: totalExecutions,
-        task_type: taskType,
       });
     }
 
     result.success = result.rows_failed === 0;
     return result;
   } catch (error) {
-    result.success = false;
     result.errors.push({
       row: 0,
       identifier: 'unknown',
@@ -118,72 +152,72 @@ export async function parseExcelFile(file: File): Promise<ImportResult<TargetImp
   };
 
   try {
-    const text = await file.text();
-    const lines = text.split('\n');
+    const rows = parseCsv(await file.text());
+    if (rows.length === 0) {
+      result.errors.push({ row: 0, identifier: 'unknown', error: 'File is empty' });
+      return result;
+    }
 
-    // Skip header row
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
+    const headerIndexMap = rows[0].reduce<Record<string, number>>((acc, header, idx) => {
+      acc[normalizeHeader(header)] = idx;
+      return acc;
+    }, {});
 
+    const taskNameIndex = headerIndexMap.tasks;
+    const avgUnitTimeIndex = headerIndexMap.average_unit_execution_time_in_minutes;
+    const targetDailyIndex = headerIndexMap.target_daily;
+
+    if (taskNameIndex === undefined || avgUnitTimeIndex === undefined || targetDailyIndex === undefined) {
+      result.errors.push({
+        row: 1,
+        identifier: 'header',
+        error:
+          'Invalid header. Expected columns: Tasks, Average Unit Execution Time in Minutes, Target Daily',
+      });
+      return result;
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
       result.rows_processed++;
-      const [email, targetDate, targetMinutes] = lines[i].split(',').map((v) => v.trim());
 
-      // Validate row
-      if (!email || !targetDate) {
+      const taskName = row[taskNameIndex] || '';
+      const avgUnitTime = parseFloat(row[avgUnitTimeIndex] || '');
+      const targetDaily = parseFloat(row[targetDailyIndex] || '');
+
+      if (!taskName) {
+        result.rows_failed++;
+        result.errors.push({ row: i + 1, identifier: 'N/A', error: 'Missing task name' });
+        continue;
+      }
+
+      if (isNaN(avgUnitTime) || avgUnitTime <= 0) {
         result.rows_failed++;
         result.errors.push({
           row: i + 1,
-          email: email || 'N/A',
-          error: 'Missing email or date',
+          identifier: taskName,
+          error: 'Average Unit Execution Time in Minutes must be > 0',
         });
         continue;
       }
 
-      // Validate email format
-      if (!email.includes('@')) {
+      if (isNaN(targetDaily) || targetDaily <= 0) {
         result.rows_failed++;
-        result.errors.push({
-          row: i + 1,
-          email,
-          error: 'Invalid email format',
-        });
-        continue;
-      }
-
-      // Validate date format (YYYY-MM-DD)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
-        result.rows_failed++;
-        result.errors.push({
-          row: i + 1,
-          email,
-          error: 'Invalid date format (use YYYY-MM-DD)',
-        });
-        continue;
-      }
-
-      const minutes = parseInt(targetMinutes || '420', 10);
-      if (isNaN(minutes) || minutes <= 0) {
-        result.rows_failed++;
-        result.errors.push({
-          row: i + 1,
-          email,
-          error: 'Invalid target minutes',
-        });
+        result.errors.push({ row: i + 1, identifier: taskName, error: 'Target Daily must be > 0' });
         continue;
       }
 
       result.rows_successful++;
       result.imported_data.push({
-        email,
-        target_date: targetDate,
-        target_minutes: parseInt(targetMinutes, 10),
+        task_name: taskName,
+        average_unit_execution_time_minutes: avgUnitTime,
+        target_daily: targetDaily,
       });
     }
 
     result.success = result.rows_failed === 0;
     return result;
   } catch (error) {
-    result.success = false;
     result.errors.push({
       row: 0,
       identifier: 'unknown',
@@ -194,11 +228,7 @@ export async function parseExcelFile(file: File): Promise<ImportResult<TargetImp
 }
 
 export function generateSampleExcel(): string {
-  const header = 'email,target_date,target_minutes\n';
-  const rows = [
-    'agent1@company.com,2025-02-05,420',
-    'agent2@company.com,2025-02-05,420',
-    'agent3@company.com,2025-02-05,400',
-  ];
+  const header = 'Tasks,Average Unit Execution Time in Minutes,Target Daily\n';
+  const rows = ['Sales Calls,6,50', 'Support Tickets,8,35', 'Email Follow-up,4,30'];
   return header + rows.join('\n');
 }

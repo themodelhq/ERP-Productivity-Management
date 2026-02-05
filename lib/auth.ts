@@ -11,47 +11,11 @@ export interface AuthSession {
   logged_in_at: Date;
 }
 
-// Demo user credentials
-const DEMO_USERS = [
-  {
-    email: 'manager@company.com',
-    password: 'password',
-    id: 'manager-1',
-  },
-  {
-    email: 'admin@company.com',
-    password: 'password',
-    id: 'admin-1',
-  },
-  {
-    email: 'agent1@company.com',
-    password: 'password',
-    id: 'agent-1',
-  },
-  {
-    email: 'agent2@company.com',
-    password: 'password',
-    id: 'agent-2',
-  },
-  {
-    email: 'agent3@company.com',
-    password: 'password',
-    id: 'agent-3',
-  },
-];
-
 export async function authenticate(
   email: string,
   password: string,
 ): Promise<AuthSession | null> {
-  // In production, validate password against bcrypt hash
-  const demoUser = DEMO_USERS.find((u) => u.email === email && u.password === password);
-
-  if (!demoUser) {
-    return null;
-  }
-
-  const user = getStore().getUser(demoUser.id);
+  const user = getStore().verifyCredentials(email.trim().toLowerCase(), password);
   if (!user) {
     return null;
   }

@@ -8,7 +8,7 @@ import { getStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
-import type { ProductivityTarget, BulkTargetUpload } from '@/lib/db-schema';
+import type { BulkTargetUpload } from '@/lib/db-schema';
 
 interface TargetUploadProps {
   onComplete?: () => void;
@@ -39,26 +39,8 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
         const store = getStore();
         const currentUser = store.getAllUsers().find((u) => u.role === 'admin') || store.getAllUsers()[0];
 
-        // Import targets
-        importResult.imported_data.forEach((row) => {
-          const user = store.getUserByEmail(row.email);
-          if (user) {
-            const target: ProductivityTarget = {
-              id: `target-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              user_id: user.id,
-              target_date: row.target_date,
-              target_minutes: row.target_minutes,
-              target_executions: row.target_executions,
-              status: 'pending',
-              created_at: new Date(),
-              updated_at: new Date(),
-            };
+        store.setTaskTargetDefinitions(importResult.imported_data);
 
-            store.upsertTarget(target);
-          }
-        });
-
-        // Record bulk upload
         const upload: BulkTargetUpload = {
           id: `target-upload-${Date.now()}`,
           uploaded_by: currentUser?.id || 'unknown',
@@ -67,7 +49,11 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
           rows_processed: importResult.rows_processed,
           rows_successful: importResult.rows_successful,
           rows_failed: importResult.rows_failed,
-          error_details: importResult.errors,
+          error_details: importResult.errors.map((err) => ({
+            row: err.row,
+            email: err.identifier,
+            error: err.error,
+          })),
           status: 'completed',
         };
 
@@ -89,26 +75,24 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="w-5 h-5" />
-          Upload Productivity Targets
+          Upload Task Targets
         </CardTitle>
         <CardDescription>
-          Upload a CSV file with productivity targets (email, date, minutes)
+          Upload a CSV file with task target definitions used for 420-minute utilization analysis.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h4 className="font-semibold text-blue-900 text-sm mb-2">File Format:</h4>
           <div className="text-sm text-blue-800 font-mono bg-white p-2 rounded border border-blue-100">
-            email,target_date,target_minutes,target_executions (optional)
+            Tasks,Average Unit Execution Time in Minutes,Target Daily
             <br />
-            alice@company.com,2025-02-05,420,45
+            Sales Calls,6,50
             <br />
-            bob@company.com,2025-02-05,420,38
+            Support Tickets,8,35
           </div>
         </div>
 
-        {/* File Input */}
         <div className="flex items-center gap-3">
           <input
             type="file"
@@ -126,7 +110,6 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
           </Button>
         </div>
 
-        {/* Results */}
         {result && (
           <div className="space-y-3 border-t pt-4">
             <div className="flex items-center gap-2">
@@ -152,11 +135,6 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
                       Row {err.row}: {err.identifier} - {err.error}
                     </div>
                   ))}
-                  {result.errors.length > 5 && (
-                    <div className="text-slate-600 italic">
-                      +{result.errors.length - 5} more errors
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -164,28 +142,8 @@ export function TargetUpload({ onComplete }: TargetUploadProps) {
             {result.success && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-sm text-green-800">
-                  All targets have been successfully imported and assigned to agents.
+                  Task definitions are saved and will be used to compute daily/weekly/monthly utilization.
                 </p>
-              </div>
-            )}
-
-            {/* Summary */}
-            {result.imported_data.length > 0 && (
-              <div className="bg-slate-50 rounded-lg p-3">
-                <h4 className="font-semibold text-slate-900 text-sm mb-2">Recent Imports:</h4>
-                <div className="space-y-2 text-sm">
-                  {result.imported_data.slice(0, 5).map((row, idx) => (
-                    <div key={idx} className="flex justify-between text-slate-700">
-                      <span>{row.email} ({row.target_date})</span>
-                      <span className="font-semibold">{row.target_minutes}m</span>
-                    </div>
-                  ))}
-                  {result.imported_data.length > 5 && (
-                    <div className="text-slate-600 italic">
-                      +{result.imported_data.length - 5} more entries
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </div>
