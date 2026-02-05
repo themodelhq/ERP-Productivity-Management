@@ -11,13 +11,13 @@ import {
   ActivityLog,
   AuditLog,
   UserRole,
-  PerformanceRating,
   AgentExecution,
   BulkExecutionUpload,
 } from './db-schema';
 
 class DataStore {
   private users: Map<string, User> = new Map();
+  private passwordsByUserId: Map<string, string> = new Map();
   private sessions: Map<string, ProductivitySession> = new Map();
   private targets: Map<string, ProductivityTarget> = new Map();
   private evaluations: Map<string, PerformanceEvaluation> = new Map();
@@ -27,174 +27,7 @@ class DataStore {
   private activityLogs: ActivityLog[] = [];
   private auditLogs: AuditLog[] = [];
 
-  constructor() {
-    this.initializeDemo();
-  }
-
-  private initializeDemo() {
-    // Create demo users
-    const manager: User = {
-      id: 'manager-1',
-      email: 'manager@company.com',
-      name: 'John Manager',
-      role: 'manager',
-      department: 'Sales',
-      created_at: new Date('2024-01-01'),
-      updated_at: new Date(),
-      is_active: true,
-      settings: {
-        notifications_enabled: true,
-        idle_detection_enabled: true,
-        privacy_mode: false,
-      },
-    };
-
-    const admin: User = {
-      id: 'admin-1',
-      email: 'admin@company.com',
-      name: 'Admin User',
-      role: 'admin',
-      created_at: new Date('2024-01-01'),
-      updated_at: new Date(),
-      is_active: true,
-      settings: {
-        notifications_enabled: true,
-        idle_detection_enabled: true,
-        privacy_mode: false,
-      },
-    };
-
-    const agents: User[] = [
-      {
-        id: 'agent-1',
-        email: 'agent1@company.com',
-        name: 'Alice Johnson',
-        role: 'agent',
-        department: 'Sales',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-      {
-        id: 'agent-2',
-        email: 'agent2@company.com',
-        name: 'Bob Smith',
-        role: 'agent',
-        department: 'Sales',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-      {
-        id: 'agent-3',
-        email: 'agent3@company.com',
-        name: 'Carol White',
-        role: 'agent',
-        department: 'Support',
-        manager_id: 'manager-1',
-        created_at: new Date('2024-01-15'),
-        updated_at: new Date(),
-        is_active: true,
-        settings: {
-          notifications_enabled: true,
-          idle_detection_enabled: true,
-          privacy_mode: true,
-        },
-      },
-    ];
-
-    [manager, admin, ...agents].forEach((user) => {
-      this.users.set(user.id, user);
-    });
-
-    // Create demo sessions for the past 30 days
-    const today = new Date();
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-
-      agents.forEach((agent) => {
-        const sessionId = `session-${agent.id}-${dateStr}`;
-        const startTime = new Date(date);
-        startTime.setHours(9, 0, 0);
-
-        const totalMinutes = Math.random() > 0.3 ? 420 : 360 + Math.random() * 60;
-        const idleMinutes = totalMinutes * (0.1 + Math.random() * 0.2);
-        const activeMinutes = totalMinutes - idleMinutes;
-
-        const session: ProductivitySession = {
-          id: sessionId,
-          user_id: agent.id,
-          date: dateStr,
-          start_time: startTime,
-          end_time: new Date(startTime.getTime() + totalMinutes * 60000),
-          total_minutes: Math.round(totalMinutes),
-          active_minutes: Math.round(activeMinutes),
-          idle_minutes: Math.round(idleMinutes),
-          idle_events: [],
-          status: 'completed',
-          activities: ['Salesforce CRM', 'Email', 'Documentation', 'Calls'],
-          created_at: startTime,
-          updated_at: new Date(),
-        };
-
-        this.sessions.set(sessionId, session);
-
-        // Create target
-        const targetId = `target-${agent.id}-${dateStr}`;
-        const target: ProductivityTarget = {
-          id: targetId,
-          user_id: agent.id,
-          target_date: dateStr,
-          target_minutes: 420,
-          status: session.total_minutes >= 400 ? 'achieved' : 'missed',
-          created_at: startTime,
-          updated_at: new Date(),
-        };
-
-        this.targets.set(targetId, target);
-      });
-    }
-
-    // Create monthly evaluations
-    agents.forEach((agent) => {
-      const evaluation: PerformanceEvaluation = {
-        id: `eval-${agent.id}-2025-02`,
-        user_id: agent.id,
-        evaluation_period: '2025-02',
-        total_sessions: 20,
-        target_achievement_rate: 75 + Math.random() * 25,
-        average_daily_productivity: 350 + Math.random() * 100,
-        idle_duration_percentage: 10 + Math.random() * 15,
-        consistency_score: 70 + Math.random() * 30,
-        performance_rating: (['excellent', 'good', 'average'] as PerformanceRating[])[
-          Math.floor(Math.random() * 3)
-        ],
-        actionable_insights: [
-          'Maintain consistent daily productivity levels',
-          'Reduce idle time during peak hours',
-          'Focus on email response times',
-        ],
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-
-      this.evaluations.set(evaluation.id, evaluation);
-    });
-  }
+  constructor() {}
 
   // User operations
   getUser(id: string): User | undefined {
@@ -206,6 +39,78 @@ class DataStore {
       if (user.email === email) return user;
     }
     return undefined;
+  }
+
+  hasUsers(): boolean {
+    return this.users.size > 0;
+  }
+
+  hasAdmin(): boolean {
+    return Array.from(this.users.values()).some((u) => u.role === 'admin');
+  }
+
+  verifyCredentials(email: string, password: string): User | null {
+    const user = this.getUserByEmail(email);
+    if (!user || !user.is_active) {
+      return null;
+    }
+
+    const storedPassword = this.passwordsByUserId.get(user.id);
+    if (!storedPassword || storedPassword !== password) {
+      return null;
+    }
+
+    return user;
+  }
+
+  createUser(params: {
+    email: string;
+    name: string;
+    role: UserRole;
+    password: string;
+    department?: string;
+    manager_id?: string;
+  }): User {
+    const normalizedEmail = params.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error('Email is required');
+    }
+
+    if (this.getUserByEmail(normalizedEmail)) {
+      throw new Error('A user with this email already exists');
+    }
+
+    if (params.password.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+
+    const normalizedName = params.name.trim();
+    if (!normalizedName) {
+      throw new Error('Name is required');
+    }
+
+    const now = new Date();
+    const id = `user-${crypto.randomUUID()}`;
+    const user: User = {
+      id,
+      email: normalizedEmail,
+      name: normalizedName,
+      role: params.role,
+      department: params.department,
+      manager_id: params.manager_id,
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      settings: {
+        notifications_enabled: true,
+        idle_detection_enabled: true,
+        privacy_mode: false,
+      },
+    };
+
+    this.users.set(user.id, user);
+    this.passwordsByUserId.set(user.id, params.password);
+    return user;
   }
 
   getAllUsers(): User[] {
