@@ -20,7 +20,7 @@ export function AdminDashboard() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager'>('admin');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager' | 'agent'>('admin');
   const [newUserDepartment, setNewUserDepartment] = useState('');
   const [userCreateMessage, setUserCreateMessage] = useState('');
 
@@ -66,7 +66,7 @@ export function AdminDashboard() {
         admins: allUsers.filter((u) => u.role === 'admin').length,
         active_users: allUsers.filter((u) => u.is_active).length,
       });
-      setUserCreateMessage(`${newUserRole === 'admin' ? 'Admin' : 'Manager'} account created successfully.`);
+      setUserCreateMessage(`${newUserRole.charAt(0).toUpperCase() + newUserRole.slice(1)} account created successfully.`);
       setNewUserName('');
       setNewUserEmail('');
       setNewUserPassword('');
@@ -200,11 +200,12 @@ export function AdminDashboard() {
                 />
                 <select
                   value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'manager')}
+                  onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'manager' | 'agent')}
                   className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="admin">Admin</option>
                   <option value="manager">Manager</option>
+                  <option value="agent">Agent</option>
                 </select>
                 <Button type="submit">Create Account</Button>
                 {newUserRole === 'manager' && (
