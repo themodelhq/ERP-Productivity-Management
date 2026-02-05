@@ -25,7 +25,11 @@ export function ManagerDashboard() {
     if (!session) return;
 
     const store = getStore();
-    const teamMembers = store.getUsersByManager(session.user_id);
+    const assignedTeamMembers = store.getUsersByManager(session.user_id);
+    const teamMembers =
+      assignedTeamMembers.length > 0
+        ? assignedTeamMembers
+        : store.getUsersByRole('agent');
 
     // Calculate metrics for all team members
     const metrics = teamMembers.map((member) => {
