@@ -28,9 +28,9 @@ export interface PerformanceReport {
   recommendations: string[];
 }
 
-function buildReport(period: ReportPeriodType, referenceDate: string): PerformanceReport {
+function buildReport(period: ReportPeriodType, referenceDate: string, managerId?: string): PerformanceReport {
   const store = getStore();
-  const agents = store.getUsersByRole('agent');
+  const agents = managerId ? store.getUsersByManager(managerId) : store.getUsersByRole('agent');
 
   const days = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
 
@@ -63,15 +63,32 @@ function buildReport(period: ReportPeriodType, referenceDate: string): Performan
       : 0;
 
   const dailyMetrics = calculateDailyMetrics(referenceDate);
+  const scopedSessions = store
+    .getSessionsByDate(referenceDate)
+    .filter((session) => agents.some((agent) => agent.id === session.user_id));
+
+  const scopedAvgProductivity =
+    scopedSessions.length > 0
+      ? Math.round(scopedSessions.reduce((sum, session) => sum + session.active_minutes, 0) / scopedSessions.length)
+      : 0;
+
+  const scopedAvgIdlePercentage =
+    scopedSessions.length > 0
+      ? Math.round(
+          (scopedSessions.reduce((sum, session) => sum + session.idle_minutes, 0) /
+            scopedSessions.reduce((sum, session) => sum + session.total_minutes, 0)) *
+            100,
+        )
+      : 0;
 
   const recommendations: string[] = [];
   if (avgAchievement < 60) {
     recommendations.push('Team achievement is below threshold. Review workload and coaching plans.');
   }
-  if (dailyMetrics.avg_productivity < 300) {
+  if (scopedAvgProductivity < 300) {
     recommendations.push('Average active minutes are low. Investigate blockers and process friction.');
   }
-  if (dailyMetrics.avg_idle_percentage > 20) {
+  if (scopedAvgIdlePercentage > 20) {
     recommendations.push('Idle percentage is high. Validate task allocation and break policies.');
   }
   if (recommendations.length === 0) {
@@ -86,7 +103,7 @@ function buildReport(period: ReportPeriodType, referenceDate: string): Performan
     team_metrics: teamMetrics,
     department_summary: {
       department: 'All',
-      avg_productivity: dailyMetrics.avg_productivity,
+      avg_productivity: scopedSessions.length > 0 ? scopedAvgProductivity : dailyMetrics.avg_productivity,
       avg_achievement: Math.round(avgAchievement),
       distribution,
     },
@@ -94,17 +111,17 @@ function buildReport(period: ReportPeriodType, referenceDate: string): Performan
   };
 }
 
-export function generateDailyReport(date: string): PerformanceReport {
-  return buildReport('daily', date);
+export function generateDailyReport(date: string, managerId?: string): PerformanceReport {
+  return buildReport('daily', date, managerId);
 }
 
-export function generateWeeklyReport(date: string): PerformanceReport {
-  return buildReport('weekly', date);
+export function generateWeeklyReport(date: string, managerId?: string): PerformanceReport {
+  return buildReport('weekly', date, managerId);
 }
 
-export function generateMonthlyReport(month: string): PerformanceReport {
+export function generateMonthlyReport(month: string, managerId?: string): PerformanceReport {
   const referenceDate = `${month}-01`;
-  return buildReport('monthly', referenceDate);
+  return buildReport('monthly', referenceDate, managerId);
 }
 
 export function exportReportAsCSV(report: PerformanceReport): string {

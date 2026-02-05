@@ -15,9 +15,10 @@ import { Download, FileText } from 'lucide-react';
 
 interface ReportingPanelProps {
   managerEmail?: string;
+  managerId?: string;
 }
 
-export function ReportingPanel({ managerEmail = 'manager@company.com' }: ReportingPanelProps) {
+export function ReportingPanel({ managerEmail = 'manager@company.com', managerId }: ReportingPanelProps) {
   const [report, setReport] = useState<any>(null);
   const [periodType, setPeriodType] = useState<ReportPeriodType>('monthly');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -26,10 +27,10 @@ export function ReportingPanel({ managerEmail = 'manager@company.com' }: Reporti
   const handleGenerateReport = () => {
     const generatedReport =
       periodType === 'daily'
-        ? generateDailyReport(selectedDate)
+        ? generateDailyReport(selectedDate, managerId)
         : periodType === 'weekly'
-          ? generateWeeklyReport(selectedDate)
-          : generateMonthlyReport(selectedMonth);
+          ? generateWeeklyReport(selectedDate, managerId)
+          : generateMonthlyReport(selectedMonth, managerId);
 
     setReport(generatedReport);
   };

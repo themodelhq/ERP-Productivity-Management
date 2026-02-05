@@ -163,6 +163,10 @@ class DataStore {
     return this.users.get(id);
   }
 
+  getUser(id: string): User | undefined {
+    return this.getUserById(id);
+  }
+
   getUserByEmail(email: string): User | undefined {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -267,6 +271,60 @@ class DataStore {
     this.users.set(id, updated);
     this.persist();
     return updated;
+  }
+
+  deleteUser(id: string): boolean {
+    const user = this.users.get(id);
+    if (!user) return false;
+
+    this.users.delete(id);
+    this.passwordsByUserId.delete(id);
+
+    if (user.role === 'manager') {
+      Array.from(this.users.values()).forEach((existingUser) => {
+        if (existingUser.manager_id === id) {
+          this.users.set(existingUser.id, {
+            ...existingUser,
+            manager_id: undefined,
+            updated_at: new Date(),
+          });
+        }
+      });
+    }
+
+    Array.from(this.sessions.entries()).forEach(([sessionId, session]) => {
+      if (session.user_id === id) {
+        this.sessions.delete(sessionId);
+      }
+    });
+
+    Array.from(this.targets.entries()).forEach(([targetId, target]) => {
+      if (target.user_id === id) {
+        this.targets.delete(targetId);
+      }
+    });
+
+    Array.from(this.evaluations.entries()).forEach(([evaluationId, evaluation]) => {
+      if (evaluation.user_id === id) {
+        this.evaluations.delete(evaluationId);
+      }
+    });
+
+    Array.from(this.executions.entries()).forEach(([executionId, execution]) => {
+      if (execution.user_id === id) {
+        this.executions.delete(executionId);
+      }
+    });
+
+    const ownerPrefix = `${id}::`;
+    Array.from(this.taskTargetDefinitions.keys()).forEach((key) => {
+      if (key.startsWith(ownerPrefix)) {
+        this.taskTargetDefinitions.delete(key);
+      }
+    });
+
+    this.persist();
+    return true;
   }
 
   setTaskTargetDefinitions(ownerId: string, definitions: Omit<TaskTargetDefinition, 'owner_id'>[]): void {
