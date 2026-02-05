@@ -13,6 +13,7 @@ import {
   UserRole,
   AgentExecution,
   BulkExecutionUpload,
+  TaskTargetDefinition,
 } from './db-schema';
 
 class DataStore {
@@ -24,6 +25,7 @@ class DataStore {
   private uploads: Map<string, BulkTargetUpload> = new Map();
   private executions: Map<string, AgentExecution> = new Map();
   private executionUploads: Map<string, BulkExecutionUpload> = new Map();
+  private taskTargetDefinitions: Map<string, TaskTargetDefinition> = new Map();
   private activityLogs: ActivityLog[] = [];
   private auditLogs: AuditLog[] = [];
 
@@ -131,6 +133,22 @@ class DataStore {
     const updated = { ...user, ...updates, updated_at: new Date() };
     this.users.set(id, updated);
     return updated;
+  }
+
+  setTaskTargetDefinitions(definitions: TaskTargetDefinition[]): void {
+    this.taskTargetDefinitions.clear();
+    definitions.forEach((definition) => {
+      const key = definition.task_name.trim().toLowerCase();
+      this.taskTargetDefinitions.set(key, definition);
+    });
+  }
+
+  getTaskTargetDefinitions(): TaskTargetDefinition[] {
+    return Array.from(this.taskTargetDefinitions.values());
+  }
+
+  getTaskTargetDefinition(taskName: string): TaskTargetDefinition | undefined {
+    return this.taskTargetDefinitions.get(taskName.trim().toLowerCase());
   }
 
   // Session operations

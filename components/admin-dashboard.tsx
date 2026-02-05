@@ -17,10 +17,12 @@ export function AdminDashboard() {
   const { session, logout } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [systemStats, setSystemStats] = useState<any>(null);
-  const [newAdminName, setNewAdminName] = useState('');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [adminCreateMessage, setAdminCreateMessage] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager'>('admin');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [userCreateMessage, setUserCreateMessage] = useState('');
 
   useEffect(() => {
     const store = getStore();
@@ -42,16 +44,17 @@ export function AdminDashboard() {
 
 
 
-  const handleCreateAdmin = (e: React.FormEvent) => {
+  const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
-    setAdminCreateMessage('');
+    setUserCreateMessage('');
 
     try {
       getStore().createUser({
-        name: newAdminName,
-        email: newAdminEmail,
-        password: newAdminPassword,
-        role: 'admin',
+        name: newUserName,
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+        department: newUserRole === 'manager' ? newUserDepartment : undefined,
       });
 
       const allUsers = getStore().getAllUsers();
@@ -63,12 +66,13 @@ export function AdminDashboard() {
         admins: allUsers.filter((u) => u.role === 'admin').length,
         active_users: allUsers.filter((u) => u.is_active).length,
       });
-      setAdminCreateMessage('Admin account created successfully.');
-      setNewAdminName('');
-      setNewAdminEmail('');
-      setNewAdminPassword('');
+      setUserCreateMessage(`${newUserRole === 'admin' ? 'Admin' : 'Manager'} account created successfully.`);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserDepartment('');
     } catch (error) {
-      setAdminCreateMessage(error instanceof Error ? error.message : 'Failed to create admin account');
+      setUserCreateMessage(error instanceof Error ? error.message : 'Failed to create account');
     }
   };
 
@@ -176,27 +180,43 @@ export function AdminDashboard() {
               <CardHeader>
                 <CardTitle>User Management</CardTitle>
                 <CardDescription>View and manage all system users</CardDescription>
-              <form onSubmit={handleCreateAdmin} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-2">
+              <form onSubmit={handleCreateUser} className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-2">
                 <Input
-                  placeholder="New admin name"
-                  value={newAdminName}
-                  onChange={(e) => setNewAdminName(e.target.value)}
+                  placeholder="Full name"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
                 />
                 <Input
                   type="email"
-                  placeholder="admin@company.com"
-                  value={newAdminEmail}
-                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="user@company.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
                 />
                 <Input
                   type="password"
                   placeholder="Minimum 8 characters"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
                 />
-                <Button type="submit">Create Admin</Button>
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'manager')}
+                  className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                </select>
+                <Button type="submit">Create Account</Button>
+                {newUserRole === 'manager' && (
+                  <Input
+                    placeholder="Department (for manager)"
+                    value={newUserDepartment}
+                    onChange={(e) => setNewUserDepartment(e.target.value)}
+                    className="md:col-span-2"
+                  />
+                )}
               </form>
-              {adminCreateMessage && <p className="text-sm mt-2 text-slate-700">{adminCreateMessage}</p>}
+              {userCreateMessage && <p className="text-sm mt-2 text-slate-700">{userCreateMessage}</p>}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">

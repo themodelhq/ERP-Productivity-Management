@@ -8,11 +8,13 @@ import { getStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
-import type { AgentExecution, BulkExecutionUpload } from '@/lib/db-schema';
+import type { AgentExecution, BulkExecutionUpload, ProductivitySession, ProductivityTarget } from '@/lib/db-schema';
 
 interface ExecutionUploadProps {
   onComplete?: () => void;
 }
+
+const DAILY_TARGET_MINUTES = 420;
 
 export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
   const [file, setFile] = useState<File | null>(null);
@@ -37,32 +39,81 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
 
       if (importResult.success) {
         const store = getStore();
-        const currentUser = store.getAllUsers()[0]; // Get current user context
-        
-        // Find users by agent name and create executions
+        const allUsers = store.getAllUsers();
+        const currentUser = allUsers[0];
+
+        const usedMinutesByUserAndDate = new Map<string, number>();
+
         importResult.imported_data.forEach((row) => {
-          // Find user matching agent name
-          const matchingUser = store.getAllUsers().find((u) =>
-            u.name.toLowerCase() === row.agent_name.toLowerCase()
-          );
-
-          if (matchingUser) {
-            const execution: AgentExecution = {
-              id: `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              user_id: matchingUser.id,
-              agent_name: row.agent_name,
-              execution_date: row.execution_date,
-              total_executions: row.total_executions,
-              executions_by_type: row.task_type ? { [row.task_type]: row.total_executions } : undefined,
-              created_at: new Date(),
-              updated_at: new Date(),
-            };
-
-            store.upsertExecution(execution);
+          const matchingUser = allUsers.find((u) => u.name.toLowerCase() === row.agent_name.toLowerCase());
+          if (!matchingUser) {
+            return;
           }
+
+          const taskDefinition = store.getTaskTargetDefinition(row.task_name);
+          if (!taskDefinition) {
+            return;
+          }
+
+          const execution: AgentExecution = {
+            id: `exec-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            user_id: matchingUser.id,
+            agent_name: row.agent_name,
+            execution_date: row.execution_date,
+            total_executions: row.number_treated,
+            executions_by_type: { [row.task_name]: row.number_treated },
+            created_at: new Date(),
+            updated_at: new Date(),
+          };
+          store.upsertExecution(execution);
+
+          const key = `${matchingUser.id}::${row.execution_date}`;
+          const currentMinutes = usedMinutesByUserAndDate.get(key) || 0;
+          const rowMinutes = row.number_treated * taskDefinition.average_unit_execution_time_minutes;
+          usedMinutesByUserAndDate.set(key, currentMinutes + rowMinutes);
         });
 
-        // Record bulk upload
+        usedMinutesByUserAndDate.forEach((usedMinutes, key) => {
+          const [userId, date] = key.split('::');
+          const existingExecutions = store
+            .getExecutionsByDate(date)
+            .filter((exec) => exec.user_id === userId);
+
+          const totalExecutions = existingExecutions.reduce((sum, exec) => sum + exec.total_executions, 0);
+
+          const startTime = new Date(`${date}T09:00:00`);
+          const cappedMinutes = Math.round(Math.min(usedMinutes, DAILY_TARGET_MINUTES));
+
+          const session: ProductivitySession = {
+            id: `session-${userId}-${date}`,
+            user_id: userId,
+            date,
+            start_time: startTime,
+            end_time: new Date(startTime.getTime() + cappedMinutes * 60 * 1000),
+            total_minutes: cappedMinutes,
+            active_minutes: cappedMinutes,
+            idle_minutes: 0,
+            idle_events: [],
+            status: 'completed',
+            activities: ['Task Execution Upload'],
+            created_at: new Date(),
+            updated_at: new Date(),
+          };
+          store.upsertSession(session);
+
+          const target: ProductivityTarget = {
+            id: `target-${userId}-${date}`,
+            user_id: userId,
+            target_date: date,
+            target_minutes: DAILY_TARGET_MINUTES,
+            target_executions: totalExecutions,
+            status: cappedMinutes >= DAILY_TARGET_MINUTES ? 'achieved' : 'missed',
+            created_at: new Date(),
+            updated_at: new Date(),
+          };
+          store.upsertTarget(target);
+        });
+
         const upload: BulkExecutionUpload = {
           id: `exec-upload-${Date.now()}`,
           uploaded_by: currentUser?.id || 'unknown',
@@ -71,7 +122,11 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
           rows_processed: importResult.rows_processed,
           rows_successful: importResult.rows_successful,
           rows_failed: importResult.rows_failed,
-          error_details: importResult.errors,
+          error_details: importResult.errors.map((err) => ({
+            row: err.row,
+            agent_name: err.identifier,
+            error: err.error,
+          })),
           status: 'completed',
         };
 
@@ -93,26 +148,24 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="w-5 h-5" />
-          Upload Agent Execution Data
+          Upload Agent Sheet
         </CardTitle>
         <CardDescription>
-          Upload a CSV file with agent execution data (name, date, total executions)
+          Upload a CSV with Agent Name, Task Name, Number Treated (execution_date optional).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h4 className="font-semibold text-blue-900 text-sm mb-2">File Format:</h4>
           <div className="text-sm text-blue-800 font-mono bg-white p-2 rounded border border-blue-100">
-            agent_name,execution_date,total_executions,task_type (optional)
+            Agent Name,Task Name,Number Treated,execution_date (optional)
             <br />
-            Alice Johnson,2025-02-05,45,sales_calls
+            Alice Johnson,Sales Calls,45,2025-02-05
             <br />
-            Bob Smith,2025-02-05,38,support_tickets
+            Bob Smith,Support Tickets,38,2025-02-05
           </div>
         </div>
 
-        {/* File Input */}
         <div className="flex items-center gap-3">
           <input
             type="file"
@@ -130,7 +183,6 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
           </Button>
         </div>
 
-        {/* Results */}
         {result && (
           <div className="space-y-3 border-t pt-4">
             <div className="flex items-center gap-2">
@@ -156,11 +208,6 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
                       Row {err.row}: {err.identifier} - {err.error}
                     </div>
                   ))}
-                  {result.errors.length > 5 && (
-                    <div className="text-slate-600 italic">
-                      +{result.errors.length - 5} more errors
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -168,28 +215,8 @@ export function ExecutionUpload({ onComplete }: ExecutionUploadProps) {
             {result.success && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-sm text-green-800">
-                  All execution data has been successfully imported and matched to agents.
+                  Execution data imported. Daily, weekly, and monthly reports now use 420-minute utilization based on task execution times.
                 </p>
-              </div>
-            )}
-
-            {/* Summary */}
-            {result.imported_data.length > 0 && (
-              <div className="bg-slate-50 rounded-lg p-3">
-                <h4 className="font-semibold text-slate-900 text-sm mb-2">Recent Uploads:</h4>
-                <div className="space-y-2 text-sm">
-                  {result.imported_data.slice(0, 5).map((row, idx) => (
-                    <div key={idx} className="flex justify-between text-slate-700">
-                      <span>{row.agent_name} ({row.execution_date})</span>
-                      <span className="font-semibold">{row.total_executions} executions</span>
-                    </div>
-                  ))}
-                  {result.imported_data.length > 5 && (
-                    <div className="text-slate-600 italic">
-                      +{result.imported_data.length - 5} more entries
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </div>
